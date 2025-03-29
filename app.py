@@ -30,25 +30,28 @@ except Exception as e:
     logging.error(f"Error al autenticar con Google Drive: {e}")
     raise
 
-# Función para descargar archivos desde Drive
-def download_file(file_id, destination):
-    try:
-        request = drive_service.files().get_media(fileId=file_id)
-        with open(destination, 'wb') as f:
-            downloader = MediaIoBaseDownload(f, request)
-            done = False
-            while not done:
-                status, done = downloader.next_chunk()
-                logging.info(f"Descargando {destination}: {int(status.progress() * 100)}%")
-    except Exception as e:
-        logging.error(f"Error al descargar archivo {file_id}: {e}")
-        raise
+# Función para descargar archivos desde Drive solo si no existen
+def download_file_if_not_exists(file_id, destination):
+    if not os.path.exists(destination):
+        try:
+            request = drive_service.files().get_media(fileId=file_id)
+            with open(destination, 'wb') as f:
+                downloader = MediaIoBaseDownload(f, request)
+                done = False
+                while not done:
+                    status, done = downloader.next_chunk()
+                    logging.info(f"Descargando {destination}: {int(status.progress() * 100)}%")
+        except Exception as e:
+            logging.error(f"Error al descargar archivo {file_id}: {e}")
+            raise
+    else:
+        logging.info(f"El archivo {destination} ya existe, no se descargará nuevamente.")
 
-# Descargar modelos al iniciar la aplicación
+# Descargar modelos al iniciar la aplicación solo si no existen
 MODEL_JSON_ID = '1eRuupBoFuEB-VfhewOiS_SVEaTA2AgV8'  # Reemplaza con tu ID real si es diferente
 WEIGHTS_ID = '1fv7XRHe9WsbZEEunX7V_WOpa4WgP6Wjt'  # Reemplaza con el ID real del archivo de pesos
-download_file(MODEL_JSON_ID, 'resnet-50-MRI.json')
-download_file(WEIGHTS_ID, 'weights.hdf5')
+download_file_if_not_exists(MODEL_JSON_ID, 'resnet-50-MRI.json')
+download_file_if_not_exists(WEIGHTS_ID, 'weights.hdf5')
 
 # Cargar el modelo
 try:
