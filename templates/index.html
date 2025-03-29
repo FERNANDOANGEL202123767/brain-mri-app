@@ -16,7 +16,10 @@
         </div>
         <div id="result" class="result-section"></div>
         <div id="preview" class="preview-section">
-            <img id="imagePreview" src="" alt="Vista previa" style="display:none;">
+            <h3>Imagen Original</h3>
+            <img id="imagePreview" src="" alt="Vista previa" style="display:none; max-width: 300px;">
+            <h3>Imagen con Tumor Resaltado (si aplica)</h3>
+            <img id="tumorPreview" src="" alt="Vista previa con tumor" style="display:none; max-width: 300px;">
         </div>
     </div>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
