@@ -45,8 +45,8 @@ def download_file(file_id, destination):
         raise
 
 # Descargar modelos al iniciar la aplicación
-MODEL_JSON_ID = '1eRuupBoFuEB-VfhewOiS_SVEaTA2AgV8'  # Reemplaza con el ID real del archivo JSON en Drive
-WEIGHTS_ID = '1fv7XRHe9WsbZEEunX7V_WOpa4WgP6Wjt'  # Reemplaza con el ID real del archivo de pesos en Drive
+MODEL_JSON_ID = '1eRuupBoFuEB-VfhewOiS_SVEaTA2AgV8'  # Reemplaza con tu ID real si es diferente
+WEIGHTS_ID = '1fv7XRHe9WsbZEEunX7V_WOpa4WgP6Wjt'  # Reemplaza con el ID real del archivo de pesos
 download_file(MODEL_JSON_ID, 'resnet-50-MRI.json')
 download_file(WEIGHTS_ID, 'weights.hdf5')
 
@@ -74,16 +74,22 @@ def predict():
         return jsonify({'error': 'No se proporcionó archivo'}), 400
     file = request.files['file']
     try:
-        # Leer y procesar la imagen
-        img = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_COLOR)
+        # Leer y procesar la imagen (prueba con escala de grises primero)
+        img = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_GRAYSCALE)  # Cambiado a escala de grises
         img = cv2.resize(img, (256, 256))
-        img = img / 255.0
-        img = np.expand_dims(img, axis=0)
+        img = img / 255.0  # Normalización
+        img = np.expand_dims(img, axis=0)  # Añadir dimensión batch
+        if len(img.shape) == 3:  # Si es escala de grises, añadir canal
+            img = np.expand_dims(img, axis=-1)
+        logging.info(f"Forma de la imagen procesada: {img.shape}")  # Depuración
+        
         # Hacer predicción
         prediction = model.predict(img)
-        has_tumor = np.argmax(prediction[0])
+        logging.info(f"Predicción cruda: {prediction}")  # Ver salida del modelo
+        has_tumor = np.argmax(prediction[0])  # Asumimos 0 = no tumor, 1 = tumor (ajustar si es al revés)
         confidence = float(prediction[0][has_tumor]) * 100
         result = 'Tumor detectado' if has_tumor else 'No se detectó tumor'
+        logging.info(f"Resultado: {result}, Confianza: {confidence}")
         return jsonify({'result': result, 'confidence': confidence})
     except Exception as e:
         logging.error(f"Error en la predicción: {e}")
