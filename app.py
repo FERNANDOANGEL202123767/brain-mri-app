@@ -67,26 +67,28 @@ except Exception as e:
 def index():
     return render_template('index.html')
 
-# Ruta para predicción
 @app.route('/predict', methods=['POST'])
 def predict():
     if 'file' not in request.files:
         return jsonify({'error': 'No se proporcionó archivo'}), 400
     file = request.files['file']
     try:
-        # Leer y procesar la imagen (prueba con escala de grises primero)
-        img = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_GRAYSCALE)  # Cambiado a escala de grises
+        # Leer la imagen en color (RGB)
+        img = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_COLOR)
+        # Redimensionar a 256x256
         img = cv2.resize(img, (256, 256))
-        img = img / 255.0  # Normalización
-        img = np.expand_dims(img, axis=0)  # Añadir dimensión batch
-        if len(img.shape) == 3:  # Si es escala de grises, añadir canal
-            img = np.expand_dims(img, axis=-1)
-        logging.info(f"Forma de la imagen procesada: {img.shape}")  # Depuración
+        # Normalizar los valores de los píxeles (0 a 1)
+        img = img / 255.0
+        # Añadir dimensión del batch
+        img = np.expand_dims(img, axis=0)
+        # Registrar la forma para depuración
+        logging.info(f"Forma de la imagen procesada: {img.shape}")
         
-        # Hacer predicción
+        # Hacer la predicción con el modelo
         prediction = model.predict(img)
-        logging.info(f"Predicción cruda: {prediction}")  # Ver salida del modelo
-        has_tumor = np.argmax(prediction[0])  # Asumimos 0 = no tumor, 1 = tumor (ajustar si es al revés)
+        logging.info(f"Predicción cruda: {prediction}")
+        # Suponiendo que 0 = no tumor, 1 = tumor
+        has_tumor = np.argmax(prediction[0])
         confidence = float(prediction[0][has_tumor]) * 100
         result = 'Tumor detectado' if has_tumor else 'No se detectó tumor'
         logging.info(f"Resultado: {result}, Confianza: {confidence}")
