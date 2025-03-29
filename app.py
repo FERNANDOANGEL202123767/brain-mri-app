@@ -8,6 +8,9 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 import io
 import logging
+import base64
+from PIL import Image
+from io import BytesIO
 
 app = Flask(__name__)
 
@@ -48,8 +51,8 @@ def download_file_if_not_exists(file_id, destination):
         logging.info(f"El archivo {destination} ya existe, no se descargará nuevamente.")
 
 # Descargar modelos al iniciar la aplicación solo si no existen
-MODEL_JSON_ID = '1eRuupBoFuEB-VfhewOiS_SVEaTA2AgV8'  # Reemplaza con tu ID real si es diferente
-WEIGHTS_ID = '1fv7XRHe9WsbZEEunX7V_WOpa4WgP6Wjt'  # Reemplaza con el ID real del archivo de pesos
+MODEL_JSON_ID = '1eRuupBoFuEB-VfhewOiS_SVEaTA2AgV8'  # ID del archivo JSON
+WEIGHTS_ID = '1fv7XRHe9WsbZEEunX7V_WOpa4WgP6Wjt'  # ID del archivo de pesos
 download_file_if_not_exists(MODEL_JSON_ID, 'resnet-50-MRI.json')
 download_file_if_not_exists(WEIGHTS_ID, 'weights.hdf5')
 
@@ -79,23 +82,51 @@ def predict():
         # Leer la imagen en color (RGB)
         img = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_COLOR)
         # Redimensionar a 256x256
-        img = cv2.resize(img, (256, 256))
-        # Normalizar los valores de los píxeles (0 a 1)
-        img = img / 255.0
-        # Añadir dimensión del batch
-        img = np.expand_dims(img, axis=0)
+        img_resized = cv2.resize(img, (256, 256))
+        # Normalizar para la predicción
+        img_input = img_resized / 255.0
+        img_input = np.expand_dims(img_input, axis=0)
         # Registrar la forma para depuración
-        logging.info(f"Forma de la imagen procesada: {img.shape}")
+        logging.info(f"Forma de la imagen procesada: {img_input.shape}")
         
         # Hacer la predicción con el modelo
-        prediction = model.predict(img)
+        prediction = model.predict(img_input)
         logging.info(f"Predicción cruda: {prediction}")
         # Suponiendo que 0 = no tumor, 1 = tumor
         has_tumor = np.argmax(prediction[0])
         confidence = float(prediction[0][has_tumor]) * 100
         result = 'Tumor detectado' if has_tumor else 'No se detectó tumor'
         logging.info(f"Resultado: {result}, Confianza: {confidence}")
-        return jsonify({'result': result, 'confidence': confidence})
+
+        # Convertir la imagen original a base64
+        img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
+        img_pil = Image.fromarray(img_rgb)
+        buffered = BytesIO()
+        img_pil.save(buffered, format="PNG")
+        img_original_base64 = base64.b64encode(buffered.getvalue()).decode()
+        img_original_data = f"data:image/png;base64,{img_original_base64}"
+
+        # Si hay tumor, generar una versión con superposición roja
+        img_tumor_data = None
+        if has_tumor:
+            # Crear una copia de la imagen y aplicar superposición roja
+            img_tumor = img_rgb.copy()
+            # Crear una capa roja translúcida
+            overlay = Image.new('RGBA', img_pil.size, (255, 0, 0, 0))
+            img_tumor_pil = Image.blend(img_pil.convert('RGBA'), overlay, 0.3)  # 0.3 es la opacidad
+            # Convertir a base64
+            buffered = BytesIO()
+            img_tumor_pil.save(buffered, format="PNG")
+            img_tumor_base64 = base64.b64encode(buffered.getvalue()).decode()
+            img_tumor_data = f"data:image/png;base64,{img_tumor_base64}"
+
+        # Devolver el resultado y las imágenes
+        return jsonify({
+            'result': result,
+            'confidence': confidence,
+            'img_original': img_original_data,
+            'img_tumor': img_tumor_data  # Será None si no hay tumor
+        })
     except Exception as e:
         logging.error(f"Error en la predicción: {e}")
         return jsonify({'error': 'Error al procesar la imagen'}), 500
