@@ -51,8 +51,8 @@ def download_file_if_not_exists(file_id, destination):
         logging.info(f"El archivo {destination} ya existe, no se descargará nuevamente.")
 
 # Descargar modelos al iniciar la aplicación solo si no existen
-MODEL_JSON_ID = '1eRuupBoFuEB-VfhewOiS_SVEaTA2AgV8'  # ID del archivo JSON
-WEIGHTS_ID = '1fv7XRHe9WsbZEEunX7V_WOpa4WgP6Wjt'  # ID del archivo de pesos
+MODEL_JSON_ID = '1eRuupBoFuEB-VfhewOiS_SVEaTA2AgV8'
+WEIGHTS_ID = '1fv7XRHe9WsbZEEunX7V_WOpa4WgP6Wjt'
 download_file_if_not_exists(MODEL_JSON_ID, 'resnet-50-MRI.json')
 download_file_if_not_exists(WEIGHTS_ID, 'weights.hdf5')
 
@@ -68,6 +68,23 @@ except Exception as e:
     logging.error(f"Error al cargar el modelo: {e}")
     raise
 
+# Función para generar Grad-CAM
+def get_gradcam_heatmap(img_array, model, last_conv_layer_name="conv5_block3_out"):
+    grad_model = tf.keras.models.Model(
+        [model.inputs], [model.get_layer(last_conv_layer_name).output, model.output]
+    )
+    
+    with tf.GradientTape() as tape:
+        conv_outputs, predictions = grad_model(img_array)
+        loss = predictions[:, 1]  # Clase "tumor" (índice 1)
+
+    grads = tape.gradient(loss, conv_outputs)
+    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+    conv_outputs = conv_outputs[0]
+    heatmap = tf.reduce_mean(tf.multiply(conv_outputs, pooled_grads), axis=-1)
+    heatmap = np.maximum(heatmap, 0) / np.max(heatmap)  # Normalizar entre 0 y 1
+    return cv2.resize(heatmap, (256, 256))
+
 # Ruta principal para la interfaz
 @app.route('/')
 def index():
@@ -81,24 +98,20 @@ def predict():
     try:
         # Leer la imagen en color (RGB)
         img = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_COLOR)
-        # Redimensionar a 256x256
         img_resized = cv2.resize(img, (256, 256))
-        # Normalizar para la predicción
         img_input = img_resized / 255.0
         img_input = np.expand_dims(img_input, axis=0)
-        # Registrar la forma para depuración
         logging.info(f"Forma de la imagen procesada: {img_input.shape}")
-        
-        # Hacer la predicción con el modelo
+
+        # Hacer la predicción
         prediction = model.predict(img_input)
         logging.info(f"Predicción cruda: {prediction}")
-        # Suponiendo que 0 = no tumor, 1 = tumor
         has_tumor = np.argmax(prediction[0])
         confidence = float(prediction[0][has_tumor]) * 100
         result = 'Tumor detectado' if has_tumor else 'No se detectó tumor'
         logging.info(f"Resultado: {result}, Confianza: {confidence}")
 
-        # Convertir la imagen original a base64
+        # Convertir imagen original a base64
         img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
         img_pil = Image.fromarray(img_rgb)
         buffered = BytesIO()
@@ -106,26 +119,30 @@ def predict():
         img_original_base64 = base64.b64encode(buffered.getvalue()).decode()
         img_original_data = f"data:image/png;base64,{img_original_base64}"
 
-        # Si hay tumor, generar una versión con superposición roja
+        # Si hay tumor, generar Grad-CAM y dibujar círculo
         img_tumor_data = None
         if has_tumor:
-            # Crear una copia de la imagen y aplicar superposición roja
+            # Generar heatmap con Grad-CAM
+            heatmap = get_gradcam_heatmap(img_input, model)
+            # Encontrar el centro del área más activa
+            y, x = np.unravel_index(np.argmax(heatmap), heatmap.shape)
+            # Dibujar círculo rojo en la imagen original
             img_tumor = img_rgb.copy()
-            # Crear una capa roja translúcida
-            overlay = Image.new('RGBA', img_pil.size, (255, 0, 0, 0))
-            img_tumor_pil = Image.blend(img_pil.convert('RGBA'), overlay, 0.3)  # 0.3 es la opacidad
+            center = (x, y)
+            radius = 30  # Ajusta el tamaño del círculo según necesites
+            cv2.circle(img_tumor, center, radius, (255, 0, 0), 2)  # Círculo rojo con grosor 2
             # Convertir a base64
+            img_tumor_pil = Image.fromarray(img_tumor)
             buffered = BytesIO()
             img_tumor_pil.save(buffered, format="PNG")
             img_tumor_base64 = base64.b64encode(buffered.getvalue()).decode()
             img_tumor_data = f"data:image/png;base64,{img_tumor_base64}"
 
-        # Devolver el resultado y las imágenes
         return jsonify({
             'result': result,
             'confidence': confidence,
             'img_original': img_original_data,
-            'img_tumor': img_tumor_data  # Será None si no hay tumor
+            'img_tumor': img_tumor_data
         })
     except Exception as e:
         logging.error(f"Error en la predicción: {e}")
