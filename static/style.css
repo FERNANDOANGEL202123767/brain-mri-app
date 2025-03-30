@@ -82,3 +82,7 @@ button:hover {
     from { opacity: 0; transform: translateY(-20px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+.preview-section img#tumorPreview {
+    border: 2px solid #d81b60; /* Borde rosa para destacar la imagen con tumor */
+}
