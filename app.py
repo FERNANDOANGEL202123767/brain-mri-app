@@ -76,17 +76,20 @@ def index():
 @app.route('/predict', methods=['POST'])
 def predict():
     if 'file' not in request.files:
+        logging.error("No se proporcionó archivo en request.files")
         return jsonify({'error': 'No se proporcionó archivo'}), 400
     file = request.files['file']
     try:
         # Leer la imagen en color (RGB)
         img = cv2.imdecode(np.frombuffer(file.read(), np.uint8), cv2.IMREAD_COLOR)
+        if img is None:
+            logging.error("No se pudo decodificar la imagen")
+            return jsonify({'error': 'Archivo de imagen inválido'}), 400
         # Redimensionar a 256x256
         img_resized = cv2.resize(img, (256, 256))
         # Normalizar para la predicción
         img_input = img_resized / 255.0
         img_input = np.expand_dims(img_input, axis=0)
-        # Registrar la forma para depuración
         logging.info(f"Forma de la imagen procesada: {img_input.shape}")
         
         # Hacer la predicción con el modelo
@@ -96,7 +99,7 @@ def predict():
         has_tumor = np.argmax(prediction[0])
         confidence = float(prediction[0][has_tumor]) * 100
         result = 'Tumor detectado' if has_tumor else 'No se detectó tumor'
-        logging.info(f"Resultado: {result}, Confianza: {confidence}")
+        logging.info(f"Resultado: {result}, Confianza: {confidence}, has_tumor: {has_tumor}")
 
         # Convertir la imagen original a base64
         img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
@@ -105,28 +108,36 @@ def predict():
         img_pil.save(buffered, format="PNG")
         img_original_base64 = base64.b64encode(buffered.getvalue()).decode()
         img_original_data = f"data:image/png;base64,{img_original_base64}"
+        logging.info("Imagen original generada correctamente")
 
         # Si hay tumor, generar una versión con superposición roja
-        img_tumor_data = None
+        img_tumor_data = ""
         if has_tumor:
-            # Crear una copia de la imagen y aplicar superposición roja
-            img_tumor = img_rgb.copy()
-            # Crear una capa roja translúcida
-            overlay = Image.new('RGBA', img_pil.size, (255, 0, 0, 0))
-            img_tumor_pil = Image.blend(img_pil.convert('RGBA'), overlay, 0.3)  # 0.3 es la opacidad
-            # Convertir a base64
-            buffered = BytesIO()
-            img_tumor_pil.save(buffered, format="PNG")
-            img_tumor_base64 = base64.b64encode(buffered.getvalue()).decode()
-            img_tumor_data = f"data:image/png;base64,{img_tumor_base64}"
+            try:
+                # Crear una copia de la imagen y aplicar superposición roja
+                img_tumor = img_rgb.copy()
+                # Crear una capa roja translúcida
+                overlay = Image.new('RGBA', img_pil.size, (255, 0, 0, 128))  # Alfa 128 para visibilidad
+                img_tumor_pil = Image.blend(img_pil.convert('RGBA'), overlay, 0.3)
+                # Convertir a base64
+                buffered = BytesIO()
+                img_tumor_pil.save(buffered, format="PNG")
+                img_tumor_base64 = base64.b64encode(buffered.getvalue()).decode()
+                img_tumor_data = f"data:image/png;base64,{img_tumor_base64}"
+                logging.info("Imagen de tumor generada correctamente")
+            except Exception as e:
+                logging.error(f"Error generando img_tumor: {e}")
+                img_tumor_data = ""
 
-        # Devolver el resultado y las imágenes
-        return jsonify({
+        # Preparar y loguear la respuesta
+        response = {
             'result': result,
             'confidence': confidence,
             'img_original': img_original_data,
-            'img_tumor': img_tumor_data  # Será None si no hay tumor
-        })
+            'img_tumor': img_tumor_data
+        }
+        logging.info(f"Respuesta enviada: {response}")
+        return jsonify(response)
     except Exception as e:
         logging.error(f"Error en la predicción: {e}")
         return jsonify({'error': 'Error al procesar la imagen'}), 500
