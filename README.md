@@ -154,8 +154,8 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 ## 👨‍💻 Autor
 
 **Fernando Ángel García Hernández**
-- GitHub: [@angelgarcia](https://github.com/angelgarcia)
-- LinkedIn: [fernando-angel-garcia-hernandez](https://linkedin.com/in/fernando-angel-garcia-hernandez)
+- GitHub: [@angelgarcia](https://github.com/FERNANDOANGEL202123767)
+- LinkedIn: [fernando-angel-garcia-hernandez](https://www.linkedin.com/in/fernando-angel-garcia-hernandez/)
 
 ## 🙏 Agradecimientos
 
