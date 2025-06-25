@@ -155,7 +155,7 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 
 **Fernando Ángel García Hernández**
 - GitHub: [@angelgarcia](https://github.com/FERNANDOANGEL202123767)
-- LinkedIn: [fernando-angel-garcia-hernandez](https://www.linkedin.com/in/fernando-angel-garcia-hernandez/)
+- LinkedIn: [fernando-angel-garcia-hernandez](https://www.linkedin.com/in/fernando-angel-garcia-hernandez-8a50151b3/)
 
 ## 🙏 Agradecimientos
 
